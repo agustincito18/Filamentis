@@ -1,0 +1,88 @@
+#include <LiquidCrystal.h>
+
+const int boton1Pin = 2; //arriba
+const int boton2Pin = 15; //abajo
+const int boton3Pin = 222; //izquierda
+const int boton4Pin = 444; //derecha
+const int NTC_PIN = 36;//sensor
+const int ledPin1 = 33;//motor
+const int ledPin2 = 32;//calentador
+int temperatura; //defino temperatura
+
+LiquidCrystal lcd(13, 12, 14, 27, 26, 25); // RS, E, D4-D7  
+
+void setup() {
+  Serial.begin(9600);//inicializa la comunicacion serie
+  lcd.begin(16, 2);  // Inicializa el display LCD
+  lcd.setCursor(0, 0);//fija la posicion de las letras 
+  lcd.clear();
+  lcd.print("Inicio         >"); 
+  lcd.setCursor(7, 1);//fija la posicion de las letras 
+  lcd.print("          "); 
+  
+  pinMode(ledPin1, OUTPUT);//defino los LEDS como SALIDA 
+  pinMode(ledPin2, OUTPUT);
+  pinMode(boton1Pin, INPUT_PULLUP); //defino los botones como estrada PULL-UP
+  pinMode(boton2Pin, INPUT_PULLUP);
+  pinMode(boton3Pin, INPUT_PULLUP);
+  pinMode(boton4Pin, INPUT_PULLUP);
+}
+
+void loop() {
+  if (digitalRead(boton1Pin) == HIGH) { //senal de boton
+    realizarAccion(1);
+    delay(500);
+  }
+  if (digitalRead(boton2Pin) == HIGH) {
+    realizarAccion(2);
+    delay(500);
+  }
+  if (digitalRead(boton3Pin) == HIGH) {
+    realizarAccion(3);
+    delay(500);
+  }
+  if (digitalRead(boton4Pin) == HIGH) {
+    realizarAccion(4);
+    delay(500);
+  }
+  int rawValue = analogRead(NTC_PIN);
+      Serial.println(rawValue); //Conversion para el sensor NTC100K
+      float voltage = rawValue * (3.3 / 4096.0);
+      float resistance = (33000 * voltage) / (3.3 - voltage);
+      float temperature = -1.0 / (0.003354016 +  0.0002569850 * log(resistance / 10000.0));
+      temperature += 290.00 ;
+      lcd.setCursor(6, 1); 
+      lcd.print(temperature, 2); 
+      lcd.setCursor(12, 1); 
+      lcd.print("C"); // Imprime "C" para Celsius
+      delay(500);
+}
+
+void realizarAccion(int opcion) {
+  lcd.clear();  // Limpia el display
+  
+  switch (opcion) {
+    case 1:
+      lcd.print("Calentando...");
+      lcd.setCursor(0, 1);//fija la posicion de las letras 
+      lcd.print("Temp:");
+      //
+      digitalWrite(ledPin2, HIGH); //prende el led simulando que es el CALENTADOR 
+      break;
+      
+    case 2:
+      lcd.print("Bloque listo...");
+      delay(3000);
+      lcd.clear();
+      lcd.print("Inicio de");
+      lcd.setCursor(0, 1);//fija la posicion de las letras
+      lcd.print("proceso");
+      delay(2000);
+      lcd.clear();
+      lcd.setCursor(0, 1);//fija la posicion de las letras 
+      lcd.print("Temp:");
+    
+      digitalWrite(ledPin1, HIGH);//prende el led simulando que es el MOTOR
+      break;
+  } 
+}
