@@ -1,88 +1,144 @@
+#include <PID_v1_bc.h>
 #include <LiquidCrystal.h>
+#include <math.h>
+#include <Arduino.h>
+#define CONFIG_THERMISTOR_ADC_PIN 36 // Cambiar al pin del ESP32 que desees utilizar
+// Configurar el valor de la resistencia que va en serie con el termistor NTC en ohmios
+#define CONFIG_THERMISTOR_RESISTOR 9800.0f // Cambiar al valor correcto en ohmios
 
-const int boton1Pin = 2; //arriba
-const int boton2Pin = 15; //abajo
-const int boton3Pin = 222; //izquierda
-const int boton4Pin = 444; //derecha
+const int pinBotonParo = 4;  // Pin donde está conectado el botón de paro de emergencia
+volatile bool emergencia = false;
+boolean flag = false;
+const int boton1Pin = 15; //ok
+const int boton2Pin = 2; //motor
 const int NTC_PIN = 36;//sensor
 const int ledPin1 = 33;//motor
 const int ledPin2 = 32;//calentador
-int temperatura; //defino temperatura
+const int ledPin3 = 25;//luz interrup
+const int cartridgePin = 32; // Pin PWM para controlar el cartucho resistencia (ajusta el pin según la conexión real)
+double temperature; //defino temperatura
+double resistencia;
+int bucle = 1;
+void paroDeEmergencia();
+LiquidCrystal lcd(13, 12, 14, 27, 26, 25); // RS, E, D4-D7
 
-LiquidCrystal lcd(13, 12, 14, 27, 26, 25); // RS, E, D4-D7  
+double Setpoint = 250.0;// Temperatura deseada (en grados Celsius)
+double Kp = 18;          // Constante proporcional (ajusta según la respuesta del sistema)
+double Ki = 2;          // Constante integral (ajusta según la respuesta del sistema)
+double Kd = 1;          // Constante derivativa (ajusta según la respuesta del sistema)
+double input, output;
+PID myPID(&temperature, &output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 void setup() {
-  Serial.begin(9600);//inicializa la comunicacion serie
+  Serial.begin(115200);//inicializa la comunicacion serie
+
+  pinMode(pinBotonParo, INPUT_PULLUP); // Establecer el pin como entrada con pull-up
+ // attachInterrupt(digitalPinToInterrupt(pinBotonParo), paroDeEmergencia(), FALLING); // Configurar la interrupción
+  // Resto del código de inicialización
+
+  pinMode(cartridgePin, OUTPUT);
+  digitalWrite(cartridgePin, LOW); // Apaga el cartucho resistencia al inicio
+  ledcSetup(0, 5000, 8); // Canal 0, frecuencia 5000 Hz, resolución 8 bits
+  ledcAttachPin(cartridgePin, 0); // Asigna el canal PWM al pin correspondiente
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetOutputLimits(0, 255); // Ajusta los límites de control para el cartucho resistencia
+
   lcd.begin(16, 2);  // Inicializa el display LCD
-  lcd.setCursor(0, 0);//fija la posicion de las letras 
+  lcd.setCursor(0, 0);//fija la posiscion de las letras
   lcd.clear();
-  lcd.print("Inicio         >"); 
-  lcd.setCursor(7, 1);//fija la posicion de las letras 
-  lcd.print("          "); 
-  
-  pinMode(ledPin1, OUTPUT);//defino los LEDS como SALIDA 
+  lcd.print("Iniciando ");
+  lcd.setCursor(0, 1);//fija la posiscion de las letras
+  lcd.print("Maquina... ");
+  delay(5000);
+
+
+  pinMode(ledPin1, OUTPUT);//defino los LEDS como SALIDA
   pinMode(ledPin2, OUTPUT);
-  pinMode(boton1Pin, INPUT_PULLUP); //defino los botones como estrada PULL-UP
+  pinMode(ledPin3, OUTPUT);
+  pinMode(boton1Pin, INPUT_PULLUP); //defino los botones como estrada PULLUP
   pinMode(boton2Pin, INPUT_PULLUP);
-  pinMode(boton3Pin, INPUT_PULLUP);
-  pinMode(boton4Pin, INPUT_PULLUP);
+  pinMode(pinBotonParo, INPUT_PULLUP);
+
 }
 
+
+float thermistor_get_resistance(uint16_t adcval) {
+  // Calculamos la resistencia del NTC a partir del valor del ADC
+  return (CONFIG_THERMISTOR_RESISTOR * ((4095.0f / adcval) - 1.0f));
+}
+
+float thermistor_get_temperature(float resistance) {
+  // Variable de almacenamiento temporal, evita realizar varias veces el cálculo de log
+  float temp;
+  // Calculamos logaritmo natural, se almacena en variable para varios cálculos
+  temp = log(resistance);
+  // Resolvemos la ecuación de STEINHART-HART
+  temp = 1 / (0.0008880739089481312 + (0.00025142517116266477 * temp) + (0.00000019227944881117048 * temp * temp * temp));
+  // Convertir el resultado de kelvin a centígrados y retornar
+  return temp - 186.0;
+}
 void loop() {
+
+
+ if (emergencia) {
+    lcd.clear();  // Limpia el display
+    lcd.setCursor(0, 0);//fija la posiscion de las letras
+    lcd.print("Paro de");
+    lcd.setCursor(0, 1);//fija la posiscion de las letras
+    lcd.print("emergencia");
+    digitalWrite(ledPin3, HIGH);//led
+    digitalWrite(ledPin2, LOW);//calentador
+    digitalWrite(ledPin1, LOW);//motor
+    emergencia = false; // Reiniciar la bandera de emergencia
+  }
+
+  // Calcular la resistencia eléctrica del termistor usando la lectura del ADC
+  resistencia = thermistor_get_resistance(analogRead(CONFIG_THERMISTOR_ADC_PIN));
+  // Luego calcular la temperatura según dicha resistencia
+  temperature = thermistor_get_temperature(resistencia);
+  // Imprimir resistencia y temperatura al monitor serial
+
+  lcd.clear();  // Limpia el display
+  lcd.setCursor(0, 0);//fija la posiscion de las letras
+  lcd.print("Trabajando...");
+  lcd.setCursor(0, 1);
+  lcd.print(" Temp: ");
+  lcd.setCursor(6, 1);
+  lcd.print(temperature, 1);
+  delay(3000);
+
   if (digitalRead(boton1Pin) == HIGH) { //senal de boton
-    realizarAccion(1);
-    delay(500);
+    lcd.clear();  // Limpia el display
+    lcd.setCursor(0, 0);//fija la posicion de las letras
+    lcd.print("Trabajando...");
+    lcd.setCursor(0, 1);//fija la posiscion de las letras
+    lcd.print("Temp: ");     
+    delay(1000);
   }
-  if (digitalRead(boton2Pin) == HIGH) {
-    realizarAccion(2);
-    delay(500);
+  if (digitalRead(boton2Pin) == HIGH && flag == false) { //senal de boton
+    digitalWrite(ledPin1, HIGH);
+    lcd.clear();  // Limpia el display
+    lcd.setCursor(0, 0);//fija la posicion de las letras
+    lcd.print("Motor ON");  
+    delay(3000);
+    flag=true;
   }
-  if (digitalRead(boton3Pin) == HIGH) {
-    realizarAccion(3);
-    delay(500);
-  }
-  if (digitalRead(boton4Pin) == HIGH) {
-    realizarAccion(4);
-    delay(500);
-  }
-  int rawValue = analogRead(NTC_PIN);
-      Serial.println(rawValue); //Conversion para el sensor NTC100K
-      float voltage = rawValue * (3.3 / 4096.0);
-      float resistance = (33000 * voltage) / (3.3 - voltage);
-      float temperature = -1.0 / (0.003354016 +  0.0002569850 * log(resistance / 10000.0));
-      temperature += 290.00 ;
-      lcd.setCursor(6, 1); 
-      lcd.print(temperature, 2); 
-      lcd.setCursor(12, 1); 
-      lcd.print("C"); // Imprime "C" para Celsius
-      delay(500);
+   else if  (digitalRead(boton2Pin) == HIGH && flag == true) {
+    digitalWrite(ledPin1, LOW);
+    lcd.clear();  // Limpia el display
+    lcd.setCursor(0, 0);//fija la posicion de las letras
+    lcd.print("Motor OFF");  
+    delay(3000);
+    flag=false;
+    }
+
+    
+  myPID.Compute();
+  int dutyCycle = map(output, 0, 255, 0, 255); // Mapea el valor de salida del PID (0-255) al rango PWM (0-255)
+  ledcWrite(0, dutyCycle); // Establece el ciclo de trabajo del PWM
+
 }
 
-void realizarAccion(int opcion) {
-  lcd.clear();  // Limpia el display
-  
-  switch (opcion) {
-    case 1:
-      lcd.print("Calentando...");
-      lcd.setCursor(0, 1);//fija la posicion de las letras 
-      lcd.print("Temp:");
-      //
-      digitalWrite(ledPin2, HIGH); //prende el led simulando que es el CALENTADOR 
-      break;
-      
-    case 2:
-      lcd.print("Bloque listo...");
-      delay(3000);
-      lcd.clear();
-      lcd.print("Inicio de");
-      lcd.setCursor(0, 1);//fija la posicion de las letras
-      lcd.print("proceso");
-      delay(2000);
-      lcd.clear();
-      lcd.setCursor(0, 1);//fija la posicion de las letras 
-      lcd.print("Temp:");
-    
-      digitalWrite(ledPin1, HIGH);//prende el led simulando que es el MOTOR
-      break;
-  } 
+void paroDeEmergencia() {
+  emergencia = true;  // Establecer la bandera de emergencia
 }
