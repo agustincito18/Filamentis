@@ -14,7 +14,7 @@ const int boton2Pin = 2; //motor
 const int NTC_PIN = 36;//sensor
 const int ledPin1 = 33;//motor
 const int ledPin2 = 32;//calentador
-const int ledPin3 = 25;//luz interrup
+const int ledPin3 = 22222;//luz interrup
 const int cartridgePin = 32; // Pin PWM para controlar el cartucho resistencia (ajusta el pin según la conexión real)
 double temperature; //defino temperatura
 double resistencia;
@@ -22,7 +22,7 @@ int bucle = 1;
 void paroDeEmergencia();
 LiquidCrystal lcd(13, 12, 14, 27, 26, 25); // RS, E, D4-D7
 
-double Setpoint = 250.0;// Temperatura deseada (en grados Celsius)
+double Setpoint = 220.0;// Temperatura deseada (en grados Celsius)
 double Kp = 18;          // Constante proporcional (ajusta según la respuesta del sistema)
 double Ki = 2;          // Constante integral (ajusta según la respuesta del sistema)
 double Kd = 1;          // Constante derivativa (ajusta según la respuesta del sistema)
@@ -140,5 +140,5 @@ void loop() {
 }
 
 void paroDeEmergencia() {
-  emergencia = true;  // Establecer la bandera de emergencia
+  emergencia = true;  // Establecer la bandera de emergencia
 }
